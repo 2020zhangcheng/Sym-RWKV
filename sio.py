@@ -44,11 +44,9 @@ class SIO(nn.Module):
         super(SIO, self).__init__()
         self.serialization = serialization
         # Original LSTNet components (unchanged)
-        self.sa_module_1 = PointNet_SA_Module_KNN(512, 16, 3, [64, 128], group_all=False, if_bn=False, if_idx=True)
-        self.transformer_1 = Transformer(128, dim=64)
-        self.expanding = MLP_CONV(in_channel=128, layer_dims=[256, out_dim])
+        self.sa_module_1 = PointNet_SA_Module_KNN(512, 16, 3, [64, 128, 256], group_all=False, if_bn=False, if_idx=True)
         self.mlp = nn.Sequential(
-            nn.Linear(512*2, 512),
+            nn.Linear(256*2, 512),
             nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
@@ -66,14 +64,12 @@ class SIO(nn.Module):
         xyz = point_cloud.transpose(1, 2).contiguous()  # (B, 3, N)
 
         # 1. Downsample to obtain keypoints and features (same as LSTNet)
-        keypoints, keyfeatures, _ = self.sa_module_1(xyz, xyz)   # keypoints: (B,3,512), keyfeatures: (B,128,512)
-        keyfeatures = self.transformer_1(keyfeatures, keypoints)  # (B,128,512)
-        feat = self.expanding(keyfeatures)                         # (B,512,512)
-        feat = feat.transpose(2, 1).contiguous()                  # (B,512,512)
+        keypoints, keyfeatures, _ = self.sa_module_1(xyz, xyz)   # keypoints: (B,3,512), keyfeatures: (B,256,512)
+        feat = keyfeatures.transpose(2, 1).contiguous()            # (B,512,256)
 
         # Global feature
-        gf_feat = feat.max(dim=1, keepdim=True)[0]                # (B,1,512)
-        feat = torch.cat([feat, gf_feat.repeat(1, feat.size(1), 1)], dim=-1)  # (B,512,1024)
+        gf_feat = feat.max(dim=1, keepdim=True)[0]                # (B,1,256)
+        feat = torch.cat([feat, gf_feat.repeat(1, feat.size(1), 1)], dim=-1)  # (B,512,512)
 
         # Predict affine matrices and translation vectors
         ret = self.mlp(feat)                                     # (B,512,12)
