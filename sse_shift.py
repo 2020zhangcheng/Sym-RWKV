@@ -29,31 +29,35 @@ class SSEShift(nn.Module):
     def forward(self, F):
         """
         Args:
-            F (torch.Tensor): input features of shape (seq_len, d_model)
+            F (torch.Tensor): input features of shape (B, N, d_model)
         Returns:
-            tuple: (F_R, F_K, F_V) each of shape (seq_len, d_model)
+            tuple: (F_R, F_K, F_V) each of shape (B, N, d_model)
         """
-        seq_len, d = F.shape
+        B, N, C = F.shape
+        # Pad sequence along the N dimension (index 1)
+        # pad tuple: (left, right, top, bottom) = (0, 0, 2, 2) means pad N by 2 on both sides
+        F_pad = torch.nn.functional.pad(F, (0, 0, 2, 2), mode='replicate')  # (B, N+4, C)
 
-        # Pad sequence to handle boundaries (replicate edge values)
-        # Pad left by 2 and right by 2 for indices -2, -1, +1, +2
-        F_pad = torch.nn.functional.pad(F, (0, 0, 2, 2), mode='replicate')  # (seq_len+4, d)
-
-        # Original indices in padded tensor: shift by +2
-        idx = torch.arange(seq_len, device=F.device) + 2
+        # Position indices in the original sequence (0-based), shifted by 2 due to padding
+        pos = torch.arange(N, device=F.device) + 2  # (N,)
 
         # Extract slices
-        F1 = F_pad[idx - 4, :self.d_slice]                 # (seq_len, d_slice)
-        F2 = F_pad[idx - 2, self.d_slice:2*self.d_slice]   # (seq_len, d_slice)
-        F3 = F_pad[idx,     2*self.d_slice:3*self.d_slice] # (seq_len, d_slice)
-        F4 = F_pad[idx + 2, 3*self.d_slice:]               # (seq_len, d_slice)
+        F1 = F_pad[:, pos - 4, :self.d_slice]                 # (B, N, d_slice)
+        F2 = F_pad[:, pos - 2, self.d_slice:2*self.d_slice]   # (B, N, d_slice)
+        F3 = F_pad[:, pos,     2*self.d_slice:3*self.d_slice] # (B, N, d_slice)
+        F4 = F_pad[:, pos + 2, 3*self.d_slice:]               # (B, N, d_slice)
 
-        # Concatenate to form F'
-        F_prime = torch.cat([F1, F2, F3, F4], dim=1)       # (seq_len, d_model)
+        # Concatenate along feature dimension to form F'
+        F_prime = torch.cat([F1, F2, F3, F4], dim=2)         # (B, N, d_model)
+
+        # Expand gating vectors to (1,1,d_model) for broadcasting
+        mu_R = self.mu_R.view(1, 1, -1)
+        mu_K = self.mu_K.view(1, 1, -1)
+        mu_V = self.mu_V.view(1, 1, -1)
 
         # Apply gating
-        out_R = F + (1 - self.mu_R) * F_prime
-        out_K = F + (1 - self.mu_K) * F_prime
-        out_V = F + (1 - self.mu_V) * F_prime
+        out_R = F + (1 - mu_R) * F_prime
+        out_K = F + (1 - mu_K) * F_prime
+        out_V = F + (1 - mu_V) * F_prime
 
         return out_R, out_K, out_V
