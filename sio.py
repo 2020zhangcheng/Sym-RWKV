@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from .model_utils import MLP_CONV, Transformer, PointNet_SA_Module_KNN
+from .model_utils import PointNet_SA_Module_KNN
 
 # ---------- Helper: Z-order (Morton code) sorting ----------
 def morton_code(x, y, z, bits=16):
@@ -63,7 +63,7 @@ class SIO(nn.Module):
         # Transpose to (B, 3, N) to match the original module's expectation
         xyz = point_cloud.transpose(1, 2).contiguous()  # (B, 3, N)
 
-        # 1. Downsample to obtain keypoints and features (same as LSTNet)
+        # 1. Downsample to obtain keypoints and features
         keypoints, keyfeatures, _ = self.sa_module_1(xyz, xyz)   # keypoints: (B,3,512), keyfeatures: (B,256,512)
         feat = keyfeatures.transpose(2, 1).contiguous()            # (B,512,256)
 
