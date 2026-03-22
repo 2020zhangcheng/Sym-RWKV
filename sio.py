@@ -43,7 +43,6 @@ class SIO(nn.Module):
     def __init__(self, out_dim=512, serialization='zorder'):
         super(SIO, self).__init__()
         self.serialization = serialization
-        # Original LSTNet components (unchanged)
         self.sa_module_1 = PointNet_SA_Module_KNN(512, 16, 3, [64, 128, 256], group_all=False, if_bn=False, if_idx=True)
         self.mlp = nn.Sequential(
             nn.Linear(256*2, 512),
